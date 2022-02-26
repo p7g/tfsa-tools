@@ -1,54 +1,58 @@
-from dataclasses import dataclass, field
-from datetime import date, datetime
+from __future__ import annotations
+
+import datetime
+
+if False:
+    import typing
+
+    TransactionType = typing.Literal["contribution", "withdrawal"]
+
+    class AmountJSON(typing.TypedDict):
+        cents: int
+        dollars: int
+
+    class TransactionJSON(typing.TypedDict):
+        date: str
+        type: TransactionType
+        amount: AmountJSON
 
 
-@dataclass
 class Amount:
-    _amount: int
+    def __init__(self, dollars: int = 0, cents: int = 0):
+        self.total_cents = dollars * 100 + cents
 
-    def __init__(self, dollars=0, cents=0):
-        self._amount = dollars * 100 + cents
+    def __float__(self) -> float:
+        return (self.total_cents // 100) + (self.total_cents % 100 / 100)
 
-    def __float__(self):
-        return (self._amount // 100) + (self._amount % 100 / 100)
+    def __int__(self) -> int:
+        return self.total_cents
 
-    def __add__(self, other):
+    def __add__(self, other) -> Amount:
         if other == 0:
             return self
         if isinstance(other, Amount):
-            return Amount(cents=self._amount + other._amount)
+            return Amount(cents=self.total_cents + other.total_cents)
         return NotImplemented
 
-    def __sub__(self, other):
+    def __sub__(self, other) -> Amount:
         if isinstance(other, Amount):
-            return Amount(cents=self._amount - other._amount)
+            return Amount(cents=self.total_cents - other.total_cents)
         return NotImplemented
 
-    @staticmethod
-    def _other_as_int(other):
-        if isinstance(other, Amount):
-            return other._amount
-        if isinstance(other, int):
-            return other
-        return NotImplemented
-
-    def __mul__(self, other):
-        other = self._other_as_int(other)
-        if other is NotImplemented:
+    def __mul__(self, other) -> Amount:
+        if not isinstance(other, (int, Amount)):
             return NotImplemented
-        return Amount(cents=self._amount * other)
+        return Amount(cents=self.total_cents * int(other))
 
-    def __div__(self, other):
-        other = self._other_as_int(other)
-        if other is NotImplemented:
+    def __div__(self, other) -> Amount:
+        if not isinstance(other, (int, Amount)):
             return NotImplemented
-        return Amount.from_float(self._amount / other)
+        return Amount.from_float(self.total_cents / int(other))
 
-    def __rdiv__(self, other):
-        other = self._other_as_int(other)
-        if other is NotImplemented:
+    def __rdiv__(self, other) -> Amount:
+        if not isinstance(other, (int, Amount)):
             return NotImplemented
-        return Amount.from_float(other / self._amount)
+        return Amount.from_float(int(other) / self.total_cents)
 
     __radd__ = __add__
     __rsub__ = __sub__
@@ -56,40 +60,44 @@ class Amount:
     __floordiv__ = __truediv__ = __div__
     __rfloordiv__ = __rtruediv__ = __rdiv__
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "$%0.2f" % float(self)
 
     @classmethod
-    def from_json(cls, dct):
+    def from_json(cls, dct: AmountJSON) -> Amount:
         return cls(dct["dollars"], dct["cents"])
 
     @classmethod
-    def from_float(cls, flt):
+    def from_float(cls, flt: float) -> Amount:
         dollars, cents = flt // 1, flt % 1
-        return cls(dollars, cents)
+        return cls(int(dollars), int(cents))
 
 
-@dataclass
 class Transaction:
-    date: date
-    type: str
-    amount: Amount
+    def __init__(
+        self, date: datetime.date, type: TransactionType, amount: Amount
+    ) -> None:
+        self.date = date
+        self.type = type
+        self.amount = amount
 
     @classmethod
-    def from_json(cls, dct):
+    def from_json(cls, dct: TransactionJSON) -> Transaction:
         return cls(
-            date=date.fromisoformat(dct["date"]),
+            date=datetime.date.fromisoformat(dct["date"]),
             type=dct["type"],
             amount=Amount.from_json(dct["amount"]),
         )
 
 
-@dataclass
 class TransactionSummary:
-    contributions: Amount = field(default_factory=Amount)
-    withdrawals: Amount = field(default_factory=Amount)
+    def __init__(
+        self, contributions: Amount = None, withdrawals: Amount = None
+    ) -> None:
+        self.contributions = contributions or Amount()
+        self.withdrawals = withdrawals or Amount()
 
-    def __iadd__(self, transaction):
+    def __iadd__(self, transaction) -> TransactionSummary:
         if not isinstance(transaction, Transaction):
             return NotImplemented
         if transaction.type == "contribution":
@@ -100,43 +108,47 @@ class TransactionSummary:
 
 
 class TransactionHistory:
-    def __init__(self, transactions):
+    def __init__(self, transactions: typing.Sequence[Transaction]) -> None:
         self.transactions = list(sorted(transactions, key=lambda t: t.date))
 
-    def year_summary(self, year):
+    def year_summary(self, year: int) -> TransactionSummary:
         summary = TransactionSummary()
         for tr in self.transactions:
             if tr.date.year == year:
                 summary += tr
         return summary
 
-    def _filter(self, type):
+    def _filter(
+        self, type: TransactionType
+    ) -> typing.Generator[Transaction, None, None]:
         return (tr for tr in self.transactions if tr.type == type)
 
     @property
-    def contributions(self):
+    def contributions(self) -> list[Amount]:
         return [tr.amount for tr in self._filter("contribution")]
 
     @property
-    def withdrawals(self):
+    def withdrawals(self) -> list[Amount]:
         return [tr.amount for tr in self._filter("withdrawal")]
 
     @classmethod
-    def from_json(cls, dcts):
+    def from_json(cls, dcts: list[TransactionJSON]) -> TransactionHistory:
         return cls([Transaction.from_json(d) for d in dcts])
 
 
 class TFSA:
-    def __init__(self, date_of_birth, transaction_history):
-        self._dob = date.fromisoformat(date_of_birth)
+    def __init__(
+        self, date_of_birth: datetime.date, transaction_history: TransactionHistory
+    ) -> None:
+        self._dob = date_of_birth
         self._hist = transaction_history
 
     @property
-    def _first_year(self):
+    def _first_year(self) -> int:
         return max(self._dob.year + 18, 2009)
 
     @staticmethod
-    def dollar_limit_for_year(year):
+    def dollar_limit_for_year(year) -> Amount:
         if 2009 <= year <= 2012:
             return Amount(5_000)
         if 2013 <= year <= 2014:
@@ -149,16 +161,19 @@ class TFSA:
             return Amount(6_000)
         raise NotImplementedError(year)
 
-    def yearly_gross_contribution_room(self):
+    def yearly_gross_contribution_room(self) -> list[tuple[int, Amount]]:
         return [
             (year, self.dollar_limit_for_year(year))
-            for year in range(self._first_year, datetime.now().year + 1)
+            for year in range(self._first_year, datetime.datetime.now().year + 1)
         ]
 
-    def total_gross_contribution_room(self):
-        return sum(amount for _year, amount in self.yearly_gross_contribution_room())
+    def total_gross_contribution_room(self) -> Amount:
+        return sum(
+            (amount for _year, amount in self.yearly_gross_contribution_room()),
+            Amount(),
+        )
 
-    def contribution_room(self, year):
+    def contribution_room(self, year: int) -> Amount:
         last_year_net = Amount()
         if year > self._first_year:
             last_year_transactions = self._hist.year_summary(year - 1)
