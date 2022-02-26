@@ -145,7 +145,7 @@ class TFSA:
             return Amount(10_000)
         if 2016 <= year <= 2018:
             return Amount(5_500)
-        if 2019 <= year <= 2021:
+        if 2019 <= year <= 2022:
             return Amount(6_000)
         raise NotImplementedError(year)
 
