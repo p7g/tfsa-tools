@@ -63,6 +63,11 @@ class Amount:
     def __repr__(self) -> str:
         return "$%0.2f" % float(self)
 
+    def __eq__(self, other: Amount):
+        if not isinstance(other, Amount):
+            return NotImplemented
+        return self.total_cents == other.total_cents
+
     @classmethod
     def from_json(cls, dct: AmountJSON) -> Amount:
         return cls(dct["dollars"], dct["cents"])
