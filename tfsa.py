@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import decimal
 
 if False:
     import typing
@@ -74,7 +75,10 @@ class Amount:
 
     @classmethod
     def from_float(cls, flt: float) -> Amount:
-        dollars, cents = flt // 1, flt % 1
+        dec = decimal.Decimal(flt).quantize(
+            decimal.Decimal("0.01"), rounding=decimal.ROUND_HALF_UP
+        )
+        dollars, cents = dec // 1, dec % 1
         return cls(int(dollars), int(cents * 100))
 
 
