@@ -11,6 +11,7 @@ from tfsa import Amount
 )
 def test_amount_as_float(amount, as_float):
     assert float(amount) == as_float
+    assert amount == Amount.from_float(as_float)
 
 
 @pytest.mark.parametrize(
@@ -28,3 +29,4 @@ def test_amount_repr(amount, s):
 def test_amount_equality():
     assert Amount(123, 45) == Amount(123, 45)
     assert Amount(123, 45) != Amount(123, 46)
+    assert Amount(124, 45) != Amount(123, 45)
