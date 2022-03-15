@@ -70,7 +70,7 @@ class Amount:
     @classmethod
     def from_float(cls, flt: float) -> Amount:
         dollars, cents = flt // 1, flt % 1
-        return cls(int(dollars), int(cents))
+        return cls(int(dollars), int(cents * 100))
 
 
 class Transaction:
